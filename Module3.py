@@ -12,7 +12,8 @@ import json
 from torch.utils.data import Dataset, DataLoader
 import os
 from transformers import BlipProcessor, BlipForConditionalGeneration
-
+import spacy
+from transformers import pipeline
 
 
 class ImageEmbedDataset(Dataset):
@@ -201,6 +202,112 @@ class caption_with_BLIP:
 			json.dump(paths_n_captions, f)
 
 
+class create_vocabulary:
+	def __init__(self, img_paths, labels, captions):
+		self.nlp = spacy.load("en_core_web_sm")
+		self.img_paths = img_paths
+		self.labels = labels
+		self.captions = captions
+		self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+
+
+
+	def extract_nouns(self):
+
+		all_nouns = []
+		for doc in self.captions[:10]:
+			words = self.nlp(doc)
+			print("caption:", doc)
+			#nouns = [token.text for token in words if token.pos_ in ("NOUN", "PROPN")]
+			nouns = [chunk.text for chunk in words.noun_chunks]
+			print("nlp doc", words)
+			print(nouns)
+			all_nouns.append(nouns)
+		return all_nouns
+
+	def most_related_noun(self, all_nouns):
+		"""
+		"""
+		label_description = {0:"negative", 1:"positive"}
+
+		best_noun = []
+
+		for caption, nouns, label in zip(self.captions[:10], all_nouns, self.labels[:10]):
+			if not nouns:  # edge case: caption had no nouns at all
+				best_noun.append(None)
+				continue
+
+			valence_word = label_description[label]
+
+			result = self.classifier(
+	            caption,
+	            candidate_labels=nouns,
+	            hypothesis_template=f"{{}} is the most responsible for {valence_word} emotion in the text.",
+	            multi_label=True
+	        )
+			print(result)
+			best_noun.append(result["labels"][0])
+
+		return best_noun
+
+
+	def convert_to_singular(self, nouns):
+		"""
+		"""
+		all_nouns = []
+		for item in nouns:
+			if item is None:
+				all_nouns.append(None)
+				continue
+			doc = self.nlp(item)
+			singular = [token.lemma_ for token in doc]
+			if len(singular)>1:
+				print(item, singular)
+				all_nouns.append([item])
+			else:
+				all_nouns.append(singular)
+		return all_nouns
+
+	def pos_neg_vocab(self, nouns, labels):
+		"""
+		"""
+		S0 = [] #Negative vocabulary
+		S1 = [] # Positive vocabulary
+
+		for i,n in enumerate(nouns):
+			#print(n)
+			if not n:
+				continue
+			if  labels[i] == 0:
+				S0.append(n[0])
+			else:
+				S1.append(n[0])
+		S0 = set(S0)
+		S1 = set(S1)
+
+		Sn = S0 & S1 #neutral vocabulary is the intersection of the positive and negative sets
+
+		S0 = [x for x in S0 if x not in Sn]
+		S1 = [x for x in S1 if x not in Sn]
+
+		return S0, S1, Sn
+
+
+
+
+	def save_nouns(self, all_nouns, name = "best_noun"):
+		"""
+		"""
+		paths_n_captions = {"paths":self.img_paths, "best_nouns":all_nouns}
+
+		with open(name + ".json", "w") as f:
+			json.dump(paths_n_captions, f)
+
+
+
+
+
+"""
 DATA_ROOT = "/kaggle/input/datasets/hridayaannuncio24x7/emoset-118k"  # adjust to your actual mount path
 
 with open(os.path.join(DATA_ROOT, "train.json"), "r") as f:
@@ -208,14 +315,20 @@ with open(os.path.join(DATA_ROOT, "train.json"), "r") as f:
 subset = entries[:]
 relative_paths = [entry[1] for entry in subset]  # relative paths like "image/amusement/amusement_12865.jpg"
 
-"""
+
 clip = CLIP_embedding()
 #print(subset)
 paths, embeddings = clip.create_img_embeddings(DATA_ROOT,relative_paths)
 #subset = entries[:500]
 clip.save_embeddings(paths, embeddings)
-"""
+
 
 blip = caption_with_BLIP()
 paths, captions = blip.caption_imgs(DATA_ROOT, relative_paths)
 blip.save_captions(paths, captions)
+
+n = create_vocabulary(paths[:], labels[:], captions[:])
+nouns = n.extract_nouns()
+best_nouns = n.most_related_noun(nouns)
+n.save_nouns(best_nouns)
+"""
