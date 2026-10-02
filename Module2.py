@@ -20,12 +20,13 @@ class Module2:
 		"""
 		self.model = resnet18(weights=None)  # architecture only, no pretrained weights this time
 		self.model.fc = nn.Linear(in_features=512, out_features=2)  # rebuild your custom head first
-		self.model.load_state_dict(torch.load(state_dict))
+		#self.model.load_state_dict(torch.load(state_dict))
+		self.model.load_state_dict(torch.load("resnet18_emoset_binary.pt", map_location=torch.device('cpu')))
 		target_layers = [self.model.layer4[-1]]
 		self.cam = GradCAM(model= self.model, target_layers=target_layers)
 		
-		sam = sam_model_registry["vit_b"](checkpoint="sam_vit_b_01ec64.pth")
-    	sam.to(device="cpu")
+		sam = sam_model_registry["vit_b"](checkpoint="C:/Users/My Document/Documents/00EROSdataset/sam_vit_b_01ec64.pth")
+		sam.to(device="cpu")
 		self.sam_predictor = SamPredictor(sam)
 
 	def CAM_preprocess(self, img):
@@ -39,7 +40,8 @@ class Module2:
 	        std=[0.229, 0.224, 0.225],   # ImageNet std deviation
 	    ),
 			])
-		transformed_img = preprocess(img)
+		transformed_img = preprocess(img).unsqueeze(0)  # add batch dim: [1, 3, 512, 512]
+
 		return transformed_img
 
 	def SAM_preprocess(self, img):

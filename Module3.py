@@ -215,7 +215,7 @@ class create_vocabulary:
 	def extract_nouns(self):
 
 		all_nouns = []
-		for doc in self.captions[:10]:
+		for doc in self.captions:
 			words = self.nlp(doc)
 			print("caption:", doc)
 			#nouns = [token.text for token in words if token.pos_ in ("NOUN", "PROPN")]
@@ -232,7 +232,7 @@ class create_vocabulary:
 
 		best_noun = []
 
-		for caption, nouns, label in zip(self.captions[:10], all_nouns, self.labels[:10]):
+		for caption, nouns, label in zip(self.captions, all_nouns, self.labels):
 			if not nouns:  # edge case: caption had no nouns at all
 				best_noun.append(None)
 				continue
@@ -260,7 +260,8 @@ class create_vocabulary:
 				all_nouns.append(None)
 				continue
 			doc = self.nlp(item)
-			singular = [token.lemma_ for token in doc]
+			singular = [token.lemma_ for token in doc if token.pos_ in ("NOUN", "PROPN")]
+			
 			if len(singular)>1:
 				print(item, singular)
 				all_nouns.append([item])
@@ -279,9 +280,9 @@ class create_vocabulary:
 			if not n:
 				continue
 			if  labels[i] == 0:
-				S0.append(n[0])
+				S0.extend(n[0])
 			else:
-				S1.append(n[0])
+				S1.extend(n[0])
 		S0 = set(S0)
 		S1 = set(S1)
 
